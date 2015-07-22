@@ -63,11 +63,55 @@ def test_resource_record():
     assert rr.rdata == '1.2.3.4'
 
 
-def test_txt():
+def test_response_cname():
     dns = DNSHeader.parse(
-        '\x102\x81\x80\x00\x01\x00\x01\x00\x00\x00\x00\x06google\x03com\x00'
-        '\x00\x10\x00\x01\x06google\x03com\x00\x00\x10\x00\x01\x00\x00\x01'
-        '\x0e\x00\x10\x0fv=spf1 ptr ?all')
+        '\x83-'     # identification
+        '\x81\x80'  # flags and codes
+        '\x00\x01'  # total questions
+        '\x00\x01'  # total answers
+        '\x00\x00'  # total authority RRs
+        '\x00\x00'  # total additional RRs
+        # question RR - IN CNAME www.slackware.it
+        '\x03www\tslackware\x02it\x00' '\x00\x05' '\x00\x01'
+        # compression ptr - type CNAME - class IN
+        '\xc0\x0c' '\x00\x05' '\x00\x01'
+        '\x00\x00\x01\x13\x00\x02\xc0\x10'
+    )
+
+    # check questions
+    assert dns.total_questions == 1
+    assert len(dns.questions) == 1
+    assert dns.questions[0].qname == ['www', 'slackware', 'it', '']
+
+    # check answers
+    assert dns.total_answer_rrs == 1
+    assert len(dns.answers) == 1
+
+    answer = dns.answers[0]
+    assert answer.name == ['www', 'slackware', 'it', '']
+    assert answer.type == 'CNAME'
+    assert answer['class'] == 'IN'
+    assert answer.ttl == 275
+    assert answer.rdlength == 2     # it's a pointer
+
+    rr = answer.rdata
+    assert rr.name == ['slackware', 'it', '']
+
+
+def test_answer_txt():
+    dns = DNSHeader.parse(
+        '\x102'     # identification
+        '\x81\x80'  # flags and codes
+        '\x00\x01'  # total questions
+        '\x00\x01'  # total answers
+        '\x00\x00'  # total authority RRs
+        '\x00\x00'  # total additional RRs
+        # question RR - IN TXT google.com
+        '\x06google\x03com\x00' '\x00\x10' '\x00\x01'
+        # answer RR - no compression
+        '\x06google\x03com\x00\x00\x10\x00\x01\x00\x00\x01'
+        '\x0e\x00\x10\x0fv=spf1 ptr ?all'
+    )
     assert dns.identification == 4146
     assert dns.total_questions == 1
     assert dns.total_answer_rrs == 1
@@ -89,7 +133,7 @@ def test_query():
     assert query.qname == ['GRIMM', 'utelsystems', 'local', '']
 
 
-def test_dns_compression():
+def test_request_dns_compression():
     packet = (
         '\x97\xc9'  # identification
         '\x81\x80'  # flags and codes

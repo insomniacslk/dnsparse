@@ -177,7 +177,7 @@ def Class(name):
     '''
     return Enum(
         UBInt16(name),
-        IN=1,       # internet
+        IN=1,       # Internet
         CH=3,       # Chaos
         HS=4,       # Hesiod
         ANY=255,
@@ -282,30 +282,37 @@ def IPV4Address(name):
     return IPV4AddressAdapter(Bytes(name, 4))
 
 
-# A Resource Record Name structure. Supports DNS pointer compression through the
-# MovingPointer class
-RRNAME = Struct(
-    'name',
-    Anchor('_start'),
-    Union(
-        'length_or_offset',
-        UBInt8('length'),   # regular label
-        UBInt16('offset'),  # compression pointer
-    ),
-    IfThenElse(
-        'name',
-        this.length_or_offset.length & 0xc0 == 0xc0,
-        # compression pointer
-        MovingPointer(
-            lambda ctx: ctx.length_or_offset.offset & ~0xc000,
-            Label('name'),
-            offset=1,
-            whence=os.SEEK_CUR,
+
+def RRName(name):
+    '''
+    A Resource Record Name structure. Supports DNS pointer compression through
+    the MovingPointer class
+    '''
+    return Struct(
+        name,
+        Anchor('_start'),
+        Union(
+            'length_or_offset',
+            UBInt8('length'),   # regular label
+            UBInt16('offset'),  # compression pointer
         ),
-        # regular label
-        MovingPointer(this._start, Label('name')),
-    ),
-)
+        IfThenElse(
+            'name',
+            this.length_or_offset.length & 0xc0 == 0xc0,
+            # compression pointer
+            MovingPointer(
+                lambda ctx: ctx.length_or_offset.offset & ~0xc000,
+                Label(name),
+                offset=1,
+                whence=os.SEEK_CUR,
+            ),
+            # regular label
+            MovingPointer(this._start, Label(name)),
+        ),
+    )
+
+
+RRNAME = RRName('name')
 
 
 # An RData structure. Every field defines its own format for Rdata.
@@ -314,8 +321,9 @@ RDATA = Switch(
     this.type,
     {
         # TODO implement more rdata types
+        'CNAME': RRName('rdata'),
         'TXT': PascalString('rdata'),
-        'A': IPV4Address('ip'),
+        'A': IPV4Address('rdata'),
     },
     default=Bytes('rdata', this.rdlength),
 )
@@ -332,6 +340,7 @@ def ResourceRecord(name):
         RDLENGTH,
         RDATA,
     )
+
 
 # The DNS packet header itself, combining all of the above
 DNSHeader = Struct(
